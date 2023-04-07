@@ -13,8 +13,8 @@ async function getAPIKey() {
 }
 
 function splitText(text) {
-    const replaced = text.replace(/\r\n/g, ".\n\n");
-    const paragraphs = replaced.split(/\.\n\n/);
+    const replaced = text.replace(/\r\n/g, "\n\n");
+    const paragraphs = replaced.split(/\n\n/);
     const chunks = [];
     let chunk = '';
 
@@ -87,16 +87,17 @@ function IsTextDiv(node) {
     }
 
     var numTextChildren = 0;
+    var numNonTextChildren = 0;
     const children = node.childNodes;
     for (let i = 0; i < children.length; i++) {
         if (children[i].tagName !== 'P' && children[i].nodeType !== Node.TEXT_NODE && children[i].tagName !== 'BR' && children[i].tagName !== 'SPAN') {
+            numNonTextChildren++;
             continue;
         }
         numTextChildren++
-
     }
 
-    return numTextChildren > children.length / 2 && children.length > 4;
+    return numTextChildren > numNonTextChildren * 2 && numTextChildren > 0;
 }
 
 function getTextNodes(node) {
@@ -123,7 +124,7 @@ async function translateLargeSingleText(input) {
             output = await translate(chunk, createSingleTranslationMessage);
         } catch (error) {
             console.error('Error translating text:', error);
-            throw error;
+            alert("translateLargeSingleText Error");
         }
 
         translated += output + '\n';
@@ -148,7 +149,8 @@ async function bulkTranslateNodes(nodes) {
         translatedTexts = JSON.parse(output)
     } catch (error) {
         console.error('Error translating text:', error);
-        throw error;
+        alert("bulkTranslateNodes Error");
+        return;
     }
 
     for (let i = 0; i < nodes.length; ++i) {
