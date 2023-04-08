@@ -113,7 +113,7 @@ function getTextNodes(node) {
     return textNodes;
 }
 
-async function translateLargeSingleText(input) {
+async function translateLargeSingleText(input, displayPartialTranslationFunc = () => {}) {
     const chunks = splitText(input);
 
     let translated = ""
@@ -128,6 +128,7 @@ async function translateLargeSingleText(input) {
         }
 
         translated += output + '\n';
+        displayPartialTranslationFunc(translated + '\n\n + ~~~~~~~~~~TRANSLATION IN PROGRESS.................')
         await delay(TRANSLATE_DELAY);
     }
 
@@ -191,7 +192,7 @@ async function translateAll() {
         // text is too large to translate in bulk
         if (input.length >= BULK_TRANSLATION_COMBINED_TEXT_LENGTH) {
             try {
-                const output = await translateLargeSingleText(input);
+                const output = await translateLargeSingleText(input, (partialTranslation) => setNodeText(node, partialTranslation));
                 setNodeText(node, output);
             } catch (e) {
                 return;
