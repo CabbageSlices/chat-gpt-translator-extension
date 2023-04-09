@@ -86,6 +86,7 @@ function extractArray(inputStr) {
         }
     }
 
+    console.error("Error, could not extract array from inputString:", inputStr);
     return null;
 }
 
