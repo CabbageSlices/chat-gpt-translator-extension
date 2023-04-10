@@ -71,6 +71,10 @@ function MarkTextTranslationInProgress(input) {
     return "<span class=\"gpt-translator-translation-in-progress\">" + input + "<\/span>";
 }
 
+function fixEscapedCharacter(input) {
+    return input.replace(/(?<!\\)\\/, "\\\\")
+}
+
 function extractArray(inputStr) {
     // Match an outer array of strings (including nested arrays)
     const regex = /(\[(?:\s*"(?:[^"\\]|\\.)*"\s*,?)+\s*\])/;
@@ -79,7 +83,8 @@ function extractArray(inputStr) {
     if (match && match[0]) {
         try {
             // Parse the matched string to get the array
-            const parsedArray = JSON.parse(match[0]);
+            const fixedMatch = fixEscapedCharacter(match[0])
+            const parsedArray = JSON.parse(fixedMatch);
             return parsedArray;
         } catch (error) {
             console.error("Error parsing the matched array:", error);
