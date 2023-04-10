@@ -177,12 +177,20 @@ async function translateLargeSingleText(input, displayPartialTranslationFunc = (
         let chunk = chunks[i];
         let output;
 
-        try {
-            output = await translate(chunk, createSingleTranslationMessage);
-        } catch (error) {
-            console.error('Error translating text:', error);
-            alert("translateLargeSingleText Error");
+        if(isEnglishUSKeyboard(chunk))
+        {
+            output = chunk
         }
+        else
+        {
+            try {
+                output = await translate(chunk, createSingleTranslationMessage);
+            } catch (error) {
+                console.error('Error translating text:', error);
+                alert("translateLargeSingleText Error");
+            }
+        }
+            
 
         translated += output + '\n';
         const remainingUntranslated = MarkTextTranslationInProgress(chunks.slice(i).join('\n'));
