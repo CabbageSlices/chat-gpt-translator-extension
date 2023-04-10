@@ -76,6 +76,10 @@ function fixEscapedCharacter(input) {
 }
 
 function extractArray(inputStr) {
+
+    // escape quotes so regex works
+    inputStr = inputStr.replace(/(?<!\\)\\/, "\\\\")
+
     // Match an outer array of strings (including nested arrays)
     const regex = /(\[(?:\s*"(?:[^"\\]|\\.)*"\s*,?)+\s*\])/;
     const match = inputStr.match(regex);
@@ -138,6 +142,21 @@ function isWhitespace(str) {
     return /^\s*$/.test(str);
 }
 
+function escapeString(str) {
+    const specialChars = {
+      '\\': '\\\\',
+      '\'': '\\\'',
+      '\"': '\\\"',
+      '\n': '\\n',
+      '\r': '\\r',
+      '\t': '\\t',
+      '\b': '\\b',
+      '\f': '\\f'
+    };
+  
+    return str.replace(/[\\"'\n\r\t\b\f]/g, (char) => specialChars[char]);
+  }
+
 async function translate(dataToTranslate, translationMessageFormatter) {
     const apiKey = await getAPIKey();
     return new Promise((resolve, reject) => {
@@ -189,7 +208,7 @@ async function translateLargeSingleText(input, displayPartialTranslationFunc = (
         else
         {
             try {
-                output = await translate(chunk, createSingleTranslationMessage);
+                output = await translate(escapeString(chunk), createSingleTranslationMessage);
             } catch (error) {
                 console.error('Error translating text:', error);
                 alert("translateLargeSingleText Error");
@@ -214,7 +233,7 @@ async function bulkTranslateNodes(nodes) {
 
     // we know that combined string of bulk translated nodes is smaller than chunk size, so put them all in one string array to translate
     const texts = nodes.map(node => {
-        const text = getNodeText(node);
+        const text = escapeString(getNodeText(node));
         node.innerHTML = MarkTextTranslationInProgress(text);
         return text;
     });
