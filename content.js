@@ -1,9 +1,10 @@
-var SINGLE_TRANSLATION_TEXT_LENGTH = 750;
-var BULK_TRANSLATION_MESSAGE_LENGTH = 250;
-var BULK_TRANSLATION_COMBINED_TEXT_LENGTH = SINGLE_TRANSLATION_TEXT_LENGTH - BULK_TRANSLATION_MESSAGE_LENGTH;
-var TRANSLATE_DELAY = 1000;
+var SINGLE_TRANSLATION_TEXT_LENGTH = 1500;
+var BULK_TRANSLATION_CONTEXT_MESSAGE_LENGTH = 400;
+var BULK_TRANSLATION_COMBINED_TEXT_LENGTH = SINGLE_TRANSLATION_TEXT_LENGTH - BULK_TRANSLATION_CONTEXT_MESSAGE_LENGTH;
+var TRANSLATE_DELAY = 500;
 var API_URL = "https://api.openai.com/v1/chat/completions";
 
+var translations = []
 async function getAPIKey() {
     return new Promise((resolve) => {
         chrome.storage.sync.get('apiKey', (data) => {
@@ -34,10 +35,18 @@ function splitText(text) {
 }
 
 function createBulkTranslationMessage(stringArray) {
-    return `I will provide an array of strings in the form ["string", "string"]. 
-    translate each string inside the array directly to English. Don't Summarize or shorten the final result. Provide an exact translation only.
-    Return ONLY an array of translated strings compatible with JSON.parse, and nothing else. The resulting array must in the exact same order as the input array, and must have the exact same length as the input array.
-    input array:  ${JSON.stringify(stringArray)} `
+    return `I will provide an input as a JSON array in the format:
+    ["string1", "string2"]
+    
+    a plain array of strings that need to be translated from chinese to english.
+    
+    respond in the following JSON object format:
+     
+    ["translatedString1", "translatedString2"]
+    
+    as an array of translated strings. Only respond in the specified array format described above. Respond with only the array and nothing else. Don't add any description and don't prefix the array with other text.
+    
+    Here is my input:  ${JSON.stringify(stringArray)} `
 }
 
 function createSingleTranslationMessage(string) {
@@ -103,7 +112,7 @@ function isEnglishUSKeyboard(str) {
     // The regex below matches English letters, numbers, and special characters found on a US keyboard
     const regex = /^[A-Za-z0-9 `~!@#$%^&*()-=_+[\]{}|;':",.\/\\<>?\r\n\t]*$/;
     return regex.test(str);
-}   
+}
 
 function getTextNodes(node) {
     let textNodes = [];
@@ -135,7 +144,13 @@ function setNodeText(node, newText) {
     if (node.tagName === 'DIV') {
         node.style.cssText += "white-space: pre-wrap;";
     }
-    node.textContent = newText
+
+    if (node.innerText) {
+        node.innerText = newText
+    }
+    else {
+        node.textContent = newText
+    }
 }
 
 function isWhitespace(str) {
@@ -144,18 +159,52 @@ function isWhitespace(str) {
 
 function escapeString(str) {
     const specialChars = {
-      '\\': '\\\\',
-      '\'': '\\\'',
-      '\"': '\\\"',
-      '\n': '\\n',
-      '\r': '\\r',
-      '\t': '\\t',
-      '\b': '\\b',
-      '\f': '\\f'
+        '\\': '\\\\',
+        '\'': '\\\'',
+        '\"': '\\\"',
+        '\n': '\\n',
+        '\r': '\\r',
+        '\t': '\\t',
+        '\b': '\\b',
+        '\f': '\\f'
     };
-  
+
     return str.replace(/[\\"'\n\r\t\b\f]/g, (char) => specialChars[char]);
-  }
+}
+
+function encode(str) {
+    const specialChars = {
+        '\\': '%01',
+        '\'': '%02',
+        '\"': '%03',
+        '\n': '%04',
+        '\r': '%05',
+        '\t': '%06',
+        '\b': '%07',
+        '\f': '%08',
+        '“': '%09',
+        '”': '%10',
+    };
+
+    return str.replace(/[\\"”'\n\r\t\b\f“]/g, (char) => specialChars[char]);
+}
+
+function decode(str) {
+    const specialChars = {
+        '%01': '\\',
+        '%02': '\'',
+        '%03': '\"',
+        '%04': '\n',
+        '%05': '\r',
+        '%06': '\t',
+        '%07': '\b',
+        '%08': '\f',
+        '%09': '\"',
+        '%10': '\"'
+    };
+
+    return str.replace(/.*(%01|%02|%03|%04|%05|%06|%07|%08|%09).*/g, (match) => specialChars[match]);
+}
 
 async function translate(dataToTranslate, translationMessageFormatter) {
     const apiKey = await getAPIKey();
@@ -166,7 +215,7 @@ async function translate(dataToTranslate, translationMessageFormatter) {
         }
 
         const data = JSON.stringify({
-            model: "gpt-3.5-turbo",
+            model: "gpt-3.5-turbo-16k",
             messages: [{ "role": "user", "content": translationMessageFormatter(dataToTranslate) }]
         });
 
@@ -201,20 +250,18 @@ async function translateLargeSingleText(input, displayPartialTranslationFunc = (
         let chunk = chunks[i];
         let output;
 
-        if(isEnglishUSKeyboard(chunk))
-        {
+        if (isEnglishUSKeyboard(chunk)) {
             output = chunk
         }
-        else
-        {
+        else {
             try {
-                output = await translate(escapeString(chunk), createSingleTranslationMessage);
+                output = await translate(chunk, createSingleTranslationMessage);
             } catch (error) {
                 console.error('Error translating text:', error);
                 alert("translateLargeSingleText Error");
             }
         }
-            
+
 
         translated += output + '\n';
         const remainingUntranslated = MarkTextTranslationInProgress(chunks.slice(i).join('\n'));
@@ -233,24 +280,25 @@ async function bulkTranslateNodes(nodes) {
 
     // we know that combined string of bulk translated nodes is smaller than chunk size, so put them all in one string array to translate
     const texts = nodes.map(node => {
-        const text = escapeString(getNodeText(node));
+        const text = getNodeText(node);
         node.innerHTML = MarkTextTranslationInProgress(text);
-        return text;
+        return encode(text);
     });
 
     let translatedTexts = []
     let output
     try {
         output = await translate(texts, createBulkTranslationMessage);
-        translatedTexts = extractArray(output)
+        translatedTexts = JSON.parse(output)
+        //translatedTexts = extractArray(output)
     } catch (error) {
         console.error('Error translating text:', error);
         alert("bulkTranslateNodes Error");
         return;
     }
 
-    for (let i = 0; i < nodes.length; ++i) {
-        setNodeText(nodes[i], translatedTexts[i]);
+    for (let i = 0; i < translatedTexts.length; ++i) {
+        setNodeText(nodes[i], decode(translatedTexts[i]));
     }
 }
 
