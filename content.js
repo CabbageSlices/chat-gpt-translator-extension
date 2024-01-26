@@ -14,51 +14,42 @@ async function getAPIKey() {
 }
 
 function splitText(text) {
-    const replaced = text.replace(/\r\n/g, "\n\n");
-    const paragraphs = replaced.split(/\n\n/);
+    var replaced = text.replace(/\r\n/g, "\n\n");
+    replaced = text.replace(/\n\n/g, "\n");
+    const sentences = replaced.split(/\n/);
     const chunks = [];
     let chunk = '';
 
-    paragraphs.forEach(paragraph => {
-        if (chunk.length + paragraph.length > SINGLE_TRANSLATION_TEXT_LENGTH) {
+    sentences.forEach(sentence => {
+        if (chunk.length + sentence.length > SINGLE_TRANSLATION_TEXT_LENGTH) {
             chunks.push(chunk);
             chunk = '';
         }
-        chunk += paragraph + '\n\n';
+        chunk += sentence + "  \n  ";
     });
 
     if (chunk.trim().length > 1) {
         chunks.push(chunk);
     }
 
+    var joinedChunks = chunks.join("  \n\n  ");
+    if(joinedChunks.length < text.length)
+    {
+        console.error("large text split is somehow shorther than original text");
+        throw "large text split is somehow shorther than original text"
+    }
+
     return chunks;
 }
 
-function createBulkTranslationMessage(stringArray) {
-    return `I will provide an input as a JSON array in the format:
-    ["string1", "string2"]
-    
-    a plain array of strings that need to be translated from chinese to english.
-    
-    respond in the following JSON object format:
-     
-    ["translatedString1", "translatedString2"]
-    
-    as an array of translated strings. Only respond in the specified array format described above. Respond with only the array and nothing else. Don't add any description and don't prefix the array with other text.
-    
-    Here is my input:  ${JSON.stringify(stringArray)} `
-}
-
 function createSingleTranslationMessage(string) {
-    return "translate directly to English. Don't Summarize or shorten the final result. Provide an exact translation only: " + string
+    return "translate the following text to English and only respond with the translated the text. Don't add any extra messages such as 'here is the translated result'. The text will contain special characters in the form of \n, these special characters  MUST be left AS IS in the final result. DO NOT MODIFY THE SPECIAL CHARACTERS WHILE TRANSLATING. Text:" + string
 }
 
 // if div only has paragraphs or text nodes then we want to process all the div t ext together, instead of 1 pargraph node at a time
 function IsTextDiv(node) {
-
     if (node.tagName != 'DIV') {
         return false;
-
     }
 
     var numTextChildren = 0;
@@ -75,45 +66,6 @@ function IsTextDiv(node) {
     return numTextChildren > numNonTextChildren * 2 && numTextChildren > 0;
 }
 
-function MarkTextTranslationInProgress(input) {
-
-    return "<span class=\"gpt-translator-translation-in-progress\">" + input + "<\/span>";
-}
-
-function fixEscapedCharacter(input) {
-    return input.replace(/(?<!\\)\\/, "\\\\")
-}
-
-function extractArray(inputStr) {
-
-    // escape quotes so regex works
-    inputStr = inputStr.replace(/(?<!\\)\\/, "\\\\")
-
-    // Match an outer array of strings (including nested arrays)
-    const regex = /(\[(?:\s*"(?:[^"\\]|\\.)*"\s*,?)+\s*\])/;
-    const match = inputStr.match(regex);
-
-    if (match && match[0]) {
-        try {
-            // Parse the matched string to get the array
-            const fixedMatch = fixEscapedCharacter(match[0])
-            const parsedArray = JSON.parse(fixedMatch);
-            return parsedArray;
-        } catch (error) {
-            console.error("Error parsing the matched array:", error);
-        }
-    }
-
-    console.error("Error, could not extract array from inputString:", inputStr);
-    return null;
-}
-
-function isEnglishUSKeyboard(str) {
-    // The regex below matches English letters, numbers, and special characters found on a US keyboard
-    const regex = /^[A-Za-z0-9 `~!@#$%^&*()-=_+[\]{}|;':",.\/\\<>?\r\n\t]*$/;
-    return regex.test(str);
-}
-
 function getTextNodes(node) {
     let textNodes = [];
     if (node.nodeType === Node.TEXT_NODE || IsTextDiv(node)) {
@@ -125,6 +77,17 @@ function getTextNodes(node) {
         }
     }
     return textNodes;
+}
+
+function MarkTextTranslationInProgress(input) {
+
+    return "<span class=\"gpt-translator-translation-in-progress\">" + input + "<\/span>";
+}
+
+function isEnglishUSKeyboard(str) {
+    // The regex below matches English letters, numbers, and special characters found on a US keyboard
+    const regex = /^[A-Za-z0-9 `~!@#$%^&*()-=_+[\]{}|;':",.\/\\<>?\r\n\t]*$/;
+    return regex.test(str);
 }
 
 function getNodeText(node) {
@@ -155,55 +118,6 @@ function setNodeText(node, newText) {
 
 function isWhitespace(str) {
     return /^\s*$/.test(str);
-}
-
-function escapeString(str) {
-    const specialChars = {
-        '\\': '\\\\',
-        '\'': '\\\'',
-        '\"': '\\\"',
-        '\n': '\\n',
-        '\r': '\\r',
-        '\t': '\\t',
-        '\b': '\\b',
-        '\f': '\\f'
-    };
-
-    return str.replace(/[\\"'\n\r\t\b\f]/g, (char) => specialChars[char]);
-}
-
-function encode(str) {
-    const specialChars = {
-        '\\': '%01',
-        '\'': '%02',
-        '\"': '%03',
-        '\n': '%04',
-        '\r': '%05',
-        '\t': '%06',
-        '\b': '%07',
-        '\f': '%08',
-        '“': '%09',
-        '”': '%10',
-    };
-
-    return str.replace(/[\\"”'\n\r\t\b\f“]/g, (char) => specialChars[char]);
-}
-
-function decode(str) {
-    const specialChars = {
-        '%01': '\\',
-        '%02': '\'',
-        '%03': '\"',
-        '%04': '\n',
-        '%05': '\r',
-        '%06': '\t',
-        '%07': '\b',
-        '%08': '\f',
-        '%09': '\"',
-        '%10': '\"'
-    };
-
-    return str.replace(/.*(%01|%02|%03|%04|%05|%06|%07|%08|%09).*/g, (match) => specialChars[match]);
 }
 
 async function translate(dataToTranslate, translationMessageFormatter) {
@@ -244,6 +158,7 @@ async function translate(dataToTranslate, translationMessageFormatter) {
 async function translateLargeSingleText(input, displayPartialTranslationFunc = () => { }) {
     displayPartialTranslationFunc(MarkTextTranslationInProgress(input));
     const chunks = splitText(input);
+    var translatedChunks = [];
 
     let translated = ""
     for (var i = 0; i < chunks.length; ++i) {
@@ -256,62 +171,58 @@ async function translateLargeSingleText(input, displayPartialTranslationFunc = (
         else {
             try {
                 output = await translate(chunk, createSingleTranslationMessage);
+                translatedChunks.push(output)
             } catch (error) {
                 console.error('Error translating text:', error);
                 alert("translateLargeSingleText Error");
             }
         }
 
+        if(output == null || output.trim().length < chunk.length / 2)
+        {
+            console.error("Translated chunks is empty or only partially translated while attempting to translate: ", chunk)
+            throw "Translated chunk is empty";
+        }
 
-        translated += output + '\n';
-        const remainingUntranslated = MarkTextTranslationInProgress(chunks.slice(i).join('\n'));
-        displayPartialTranslationFunc(translated + '\n' + remainingUntranslated);
+        translated += output + "\n\n";
+
+        if(i < chunks.length - 1)
+        {
+            const remainingUntranslated = MarkTextTranslationInProgress(chunks.slice(i + 1).join("\n\n"));
+            displayPartialTranslationFunc(translated + '\n' + remainingUntranslated);
+        }
         await delay(TRANSLATE_DELAY);
+    }
+
+    if(chunks.length != translatedChunks.length)
+    {
+        console.error("Translated chunks not equal to raw chunks")
+        console.log("raw: ", chunks)
+        console.log("translated: ", translatedChunks)
+        throw "Translated chunks not equal to raw chunks";
     }
 
     return translated;
 }
 
-async function bulkTranslateNodes(nodes) {
+function sortTextNodeComparitor(node1, node2) {
 
-    if (nodes.length == 0) {
-        return;
-    }
+    var node1Text = getNodeText(node1)
+    var node2Text = getNodeText(node2)
 
-    // we know that combined string of bulk translated nodes is smaller than chunk size, so put them all in one string array to translate
-    const texts = nodes.map(node => {
-        const text = getNodeText(node);
-        node.innerHTML = MarkTextTranslationInProgress(text);
-        return encode(text);
-    });
-
-    let translatedTexts = []
-    let output
-    try {
-        output = await translate(texts, createBulkTranslationMessage);
-        translatedTexts = JSON.parse(output)
-        //translatedTexts = extractArray(output)
-    } catch (error) {
-        console.error('Error translating text:', error);
-        alert("bulkTranslateNodes Error");
-        return;
-    }
-
-    for (let i = 0; i < translatedTexts.length; ++i) {
-        setNodeText(nodes[i], decode(translatedTexts[i]));
-    }
+    return node1Text.length > node2Text.length ? -1 : 1;
 }
 
 async function translateAll() {
-    console.log("~~~~~~~STARTING TRANSLATION")
-    const textNodes = getTextNodes(document.body);
-    let currentCombinedTextLength = 0;
-    let bulkTranslatedNodes = []
+
+    var textNodes = getTextNodes(document.body);
+    textNodes = textNodes.sort(sortTextNodeComparitor);
+
     for (const node of textNodes) {
 
         const input = getNodeText(node);
 
-        if (input == null || isWhitespace(input)) {
+        if (input == null || isWhitespace(input) || input.length < 70) {
             continue;
         }
 
@@ -320,38 +231,12 @@ async function translateAll() {
             continue;
         }
 
-        // text is too large to translate in bulk
-        if (input.length >= BULK_TRANSLATION_COMBINED_TEXT_LENGTH) {
-            try {
-                const output = await translateLargeSingleText(input, (partialTranslation) => setPartialTranslation(node, partialTranslation));
-                setNodeText(node, output);
-            } catch (e) {
-                console.log(e)
-            }
-            continue;
+        try {
+            const output = await translateLargeSingleText(input, (partialTranslation) => setPartialTranslation(node, partialTranslation));
+            setNodeText(node, output);
+        } catch (e) {
+            console.log(e)
         }
-
-        // node can't fit, don't bulk translate it. translate what we have now
-        if (currentCombinedTextLength + input.length > BULK_TRANSLATION_COMBINED_TEXT_LENGTH || bulkTranslateNodes.length > 25) {
-            try {
-                await bulkTranslateNodes(bulkTranslatedNodes);
-            } catch (e) {
-                console.log(e)
-            }
-            bulkTranslatedNodes = []
-            currentCombinedTextLength = 0;
-            continue;
-        }
-
-        bulkTranslatedNodes.push(node);
-        currentCombinedTextLength += input.length;
-    }
-
-    try {
-        await bulkTranslateNodes(bulkTranslatedNodes);
-    } catch (e) {
-        console.log(e);
-        return;
     }
 }
 
