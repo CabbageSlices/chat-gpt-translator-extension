@@ -1,4 +1,4 @@
-var SINGLE_TRANSLATION_TEXT_LENGTH = 1500;
+var SINGLE_TRANSLATION_TEXT_LENGTH = 1000;
 var BULK_TRANSLATION_CONTEXT_MESSAGE_LENGTH = 400;
 var BULK_TRANSLATION_COMBINED_TEXT_LENGTH = SINGLE_TRANSLATION_TEXT_LENGTH - BULK_TRANSLATION_CONTEXT_MESSAGE_LENGTH;
 var TRANSLATE_DELAY = 500;
@@ -332,7 +332,7 @@ async function translateAll() {
         }
 
         // node can't fit, don't bulk translate it. translate what we have now
-        if (currentCombinedTextLength + input.length > BULK_TRANSLATION_COMBINED_TEXT_LENGTH) {
+        if (currentCombinedTextLength + input.length > BULK_TRANSLATION_COMBINED_TEXT_LENGTH || bulkTranslateNodes.length > 25) {
             try {
                 await bulkTranslateNodes(bulkTranslatedNodes);
             } catch (e) {
